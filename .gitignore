@@ -2,3 +2,4 @@
 data/
 *.DS_Store
 *~
+*cs285.egg-info/

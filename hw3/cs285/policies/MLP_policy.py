@@ -13,18 +13,18 @@ from cs285.policies.base_policy import BasePolicy
 
 
 class MLPPolicy(BasePolicy, nn.Module, metaclass=abc.ABCMeta):
-
-    def __init__(self,
-                 ac_dim,
-                 ob_dim,
-                 n_layers,
-                 size,
-                 discrete=False,
-                 learning_rate=1e-4,
-                 training=True,
-                 nn_baseline=False,
-                 **kwargs
-                 ):
+    def __init__(
+        self,
+        ac_dim,
+        ob_dim,
+        n_layers,
+        size,
+        discrete=False,
+        learning_rate=1e-4,
+        training=True,
+        nn_baseline=False,
+        **kwargs
+    ):
         super().__init__(**kwargs)
 
         # init vars
@@ -38,20 +38,24 @@ class MLPPolicy(BasePolicy, nn.Module, metaclass=abc.ABCMeta):
         self.nn_baseline = nn_baseline
 
         if self.discrete:
-            self.logits_na = ptu.build_mlp(input_size=self.ob_dim,
-                                           output_size=self.ac_dim,
-                                           n_layers=self.n_layers,
-                                           size=self.size)
+            self.logits_na = ptu.build_mlp(
+                input_size=self.ob_dim,
+                output_size=self.ac_dim,
+                n_layers=self.n_layers,
+                size=self.size,
+            )
             self.logits_na.to(ptu.device)
             self.mean_net = None
             self.logstd = None
-            self.optimizer = optim.Adam(self.logits_na.parameters(),
-                                        self.learning_rate)
+            self.optimizer = optim.Adam(self.logits_na.parameters(), self.learning_rate)
         else:
             self.logits_na = None
-            self.mean_net = ptu.build_mlp(input_size=self.ob_dim,
-                                      output_size=self.ac_dim,
-                                      n_layers=self.n_layers, size=self.size)
+            self.mean_net = ptu.build_mlp(
+                input_size=self.ob_dim,
+                output_size=self.ac_dim,
+                n_layers=self.n_layers,
+                size=self.size,
+            )
             self.logstd = nn.Parameter(
                 torch.zeros(self.ac_dim, dtype=torch.float32, device=ptu.device)
             )
@@ -59,7 +63,7 @@ class MLPPolicy(BasePolicy, nn.Module, metaclass=abc.ABCMeta):
             self.logstd.to(ptu.device)
             self.optimizer = optim.Adam(
                 itertools.chain([self.logstd], self.mean_net.parameters()),
-                self.learning_rate
+                self.learning_rate,
             )
 
         if nn_baseline:
@@ -91,11 +95,11 @@ class MLPPolicy(BasePolicy, nn.Module, metaclass=abc.ABCMeta):
             observation = obs
         else:
             observation = obs[None]
-            
+
         observation = torch.from_numpy(observation).float().to(ptu.device)
         action = self.forward(observation).sample().cpu().detach().numpy()
         return action
-  
+
     # update/train this policy
     def update(self, observations, actions, **kwargs):
         raise NotImplementedError
@@ -128,6 +132,22 @@ class MLPPolicy(BasePolicy, nn.Module, metaclass=abc.ABCMeta):
 
 
 class MLPPolicyAC(MLPPolicy):
-    def update(self, observations, actions, adv_n=None):
+    def update(self, observations, actions, adv_n):
         # TODO: update the policy and return the loss
+
+        observations = ptu.from_numpy(observations)
+        actions = ptu.from_numpy(actions)
+        adv_n = ptu.from_numpy(adv_n)
+
+        # Convert outputs to log probabilities
+        action_distributions = self.forward(observations)
+        log_probs = action_distributions.log_prob(actions)
+
+        assert log_probs.size() == adv_n.size()
+
+        self.optimizer.zero_grad()
+        loss = -(log_probs * adv_n).sum()
+        loss.backward()
+        self.optimizer.step()
+
         return loss.item()
