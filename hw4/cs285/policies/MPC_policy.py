@@ -98,7 +98,7 @@ class MPCPolicy(BasePolicy):
                 obs, candidate_action_sequences, model
             )
 
-        return np.squeeze(np.mean(rews, axis=1))
+        return np.squeeze(np.mean(rews, axis=0))
 
     def get_action(self, obs):
         if self.data_statistics is None:
@@ -119,9 +119,7 @@ class MPCPolicy(BasePolicy):
 
             # pick the action sequence and return the 1st element of that sequence
             best_action_sequence = np.argmax(predicted_rewards)  # TODO (Q2)
-            action_to_take = candidate_action_sequences[
-                best_action_sequence, 0
-            ]  # TODO (Q2)
+            action_to_take = candidate_action_sequences[best_action_sequence][0]  # Q2
             return action_to_take[None]  # Unsqueeze the first index
 
     def calculate_sum_of_rewards(self, obs, candidate_action_sequences, model):
@@ -137,8 +135,6 @@ class MPCPolicy(BasePolicy):
         :return: numpy array with the sum of rewards for each action sequence.
         The array should have shape [N].
         """
-        n_candidates, H, _ = candidate_action_sequences.shape
-        sum_of_rewards = np.zeros(n_candidates)  # TODO (Q2)
         # For each candidate action sequence, predict a sequence of
         # states for each dynamics model in your ensemble.
         # predicted_obs.size = [batch (=len(cadidate_action_sequences)), horizon]
@@ -147,18 +143,18 @@ class MPCPolicy(BasePolicy):
         # using `self.env.get_reward(predicted_obs, action)` at each step.
         # You should sum across `self.horizon` time step.
 
-        predicted_obs = np.empty((n_candidates, H + 1, len(obs)))
-        predicted_obs[:, 0] = np.tile(obs, (n_candidates, 1))
+        obs_batch = np.tile(obs, (self.N, 1))
+        sum_of_rewards = np.zeros(self.N)  # TODO (Q2)
 
-        for t in range(H):
-            predicted_obs[:, t + 1] = model.get_prediction(
-                predicted_obs[:, t],
+        for t in range(self.horizon):
+            sum_of_rewards += self.env.get_reward(
+                obs_batch, candidate_action_sequences[:, t]
+            )[0]
+            obs_batch = model.get_prediction(
+                obs_batch,
                 candidate_action_sequences[:, t],
                 self.data_statistics,
             )
-            sum_of_rewards += self.env.get_reward(
-                predicted_obs[:, t + 1], candidate_action_sequences[:, t]
-            )[0]
 
         # Hint: you should use model.get_prediction and you shouldn't need
         #       to import pytorch in this file.
